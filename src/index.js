@@ -25,7 +25,6 @@ mongoClient
   });
 
 app.post("/participants", (req, res) => {
-    console.log("Entrou no post")
   const { name } = req.body;
 
   const participant = {
@@ -58,17 +57,65 @@ app.post("/participants", (req, res) => {
     });
 });
 
+app.get("/participants", (req, res) => {
+  db.collection("participants")
+    .find()
+    .toArray()
+    .then((participants) => {
+      res.send(participants);
+    })
+    .catch((err) => {
+      res.send(err);
+    });
+});
 
-app.get("/participants",(req,res)=>{
-  db.collection("participants").find().toArray()
-  .then((participants)=>{
-    res.send(participants)
+app.post("/messages", (req, res) => {
+  const { to, text, type } = req.body;
+  const { user } = req.headers;
+  const message = {
+    from: user,
+    to,
+    text,
+    type,
+    time: dayjs(Date.now()).format("HH:mm:ss"),
+  };
+  db.collection("messages")
+    .insertOne(message)
+    .then(() => {
+      res.status(201);
+    })
+    .catch(() => {
+      res.sendStatus(500);
+    });
+});
+
+app.get("/messages", (req, res) => {
+  db.collection("messages")
+    .find({})
+    .toArray()
+    .then((msgs) => {
+      res.send(msgs);
+    })
+    .catch((err) => {
+      res.send(err);
+    });
+});
+
+//TODO
+app.post("/status", (req, res) => {
+  const { user } = req.headers;
+  db.collection("participants").updateOne({user:user},{
+    $set:{
+      lastStatus: Date.now(),
+    }
+  })
+  .then((response)=>{
+    console.log(response)
   })
   .catch((err)=>{
-    res.send(err)
+    console.log(err)
   })
-})
-
+});
 
 app.listen(5000, () => {
   console.log("Server is running at port 5000");
