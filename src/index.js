@@ -24,7 +24,7 @@ mongoClient
     console.log(err);
   });
 
-app.post("/participants", (req, res) => {
+app.post("/participants", async (req, res) => {
   const { name } = req.body;
 
   const participant = {
@@ -40,21 +40,14 @@ app.post("/participants", (req, res) => {
     time: dayjs(participant.lastStatus).format("HH:mm:ss"),
   };
 
-  db.collection("participants")
-    .insertOne(participant)
-    .then((response) => {
-      db.collection("messages")
-        .insertOne(logInMessage)
-        .then(() => {
-          res.sendStatus(201);
-        })
-        .catch((err) => {
-          res.sendStatus(500);
-        });
-    })
-    .catch((err) => {
-      res.status(500).send(err);
-    });
+  try {
+    await db.collection("participants").insertOne(participant);
+    await db.collection("messages").insertOne(logInMessage);
+    res.sendStatus(201);
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
+  }
 });
 
 app.get("/participants", (req, res) => {
@@ -104,17 +97,21 @@ app.get("/messages", (req, res) => {
 //TODO
 app.post("/status", (req, res) => {
   const { user } = req.headers;
-  db.collection("participants").updateOne({user:user},{
-    $set:{
-      lastStatus: Date.now(),
-    }
-  })
-  .then((response)=>{
-    console.log(response)
-  })
-  .catch((err)=>{
-    console.log(err)
-  })
+  db.collection("participants")
+    .updateOne(
+      { user: user },
+      {
+        $set: {
+          lastStatus: Date.now(),
+        },
+      }
+    )
+    .then((response) => {
+      console.log(response);
+    })
+    .catch((err) => {
+      console.log(err);
+    });
 });
 
 app.listen(5000, () => {
