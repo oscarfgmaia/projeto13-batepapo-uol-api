@@ -1,5 +1,5 @@
 import express from "express";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
@@ -40,8 +40,40 @@ const messageSchema = joi.object({
   time: joi.string().required(),
 });
 
+async function checkOnlineParticipants() {
+  try {
+    const participants = await db.collection("participants").find({}).toArray();
+    const timeNow = Date.now();
+    const participantsToBeDeleted = participants.filter((participant) => {
+      if (timeNow - participant.lastStatus >= 10000) {
+        return true;
+      } else {
+        return false;
+      }
+    });
+
+    for (let i = 0; i < participantsToBeDeleted.length; i++) {
+      const exitMessage = {
+        from: participantsToBeDeleted[i].name,
+        to: "Todos",
+        text: "sai da sala...",
+        type: "status",
+        time: dayjs(participantsToBeDeleted.lastStatus).format("HH:mm:ss"),
+      };
+      await db
+        .collection("participants")
+        .deleteOne({ _id: ObjectId(participantsToBeDeleted[i]._id) });
+      await db.collection("messages").insertOne(exitMessage);
+      console.log(participantsToBeDeleted[i]._id);
+    }
+  } catch (error) {
+    console.log(`CHECK ONLINE: ${error}`)
+  }
+}
+setInterval(checkOnlineParticipants,15000)
+
+
 app.post("/participants", async (req, res) => {
-  console.log("entrou aqui");
   const { name } = req.body;
   try {
     const alreadyRegistered = await db
@@ -152,23 +184,30 @@ app.get("/messages", async (req, res) => {
       const limitedMessages = [];
       for (let i = messages.length - 1; i >= 0; i--) {
         if (limitedMessages.length < limit) {
-          if (messages[i].to === "Todos" || messages[i].to === foundUser.name || messages[i].from === foundUser.name  ){
+          if (
+            messages[i].to === "Todos" ||
+            messages[i].to === foundUser.name ||
+            messages[i].type === "message" ||
+            messages[i].from === foundUser.name
+          ) {
             limitedMessages.unshift(messages[i]);
           }
         }
       }
       messages = limitedMessages;
-      console.log(messages.length);
     } else {
-      messages = messages.filter((msg,i) => {
-        if (messages[i].to === "Todos" || messages[i].to === foundUser.name || messages[i].from === foundUser.name  ){
+      messages = messages.filter((msg, i) => {
+        if (
+          messages[i].to === "Todos" ||
+          messages[i].to === foundUser.name ||
+          messages[i].type === "message" ||
+          messages[i].from === foundUser.name
+        ) {
           return true;
-        }
-        else{
+        } else {
           return false;
         }
       });
-      console.log(messages.length);
     }
 
     res.send(messages);
@@ -179,6 +218,7 @@ app.get("/messages", async (req, res) => {
 });
 
 app.post("/status", async (req, res) => {
+  const timeNow = Date.now();
   try {
     const foundUser = await db
       .collection("participants")
@@ -189,13 +229,11 @@ app.post("/status", async (req, res) => {
     }
     await db
       .collection("participants")
-      .updateOne(
-        { user: foundUser.name },
-        { $set: { lastStatus: Date.now() } }
-      );
+      .updateOne({ name: foundUser.name }, { $set: { lastStatus: timeNow } });
+
     res.status(200).send(req.headers.user);
   } catch (error) {
-    console.log(err);
+    console.log(error);
     res.sendStatus(500);
   }
 });
