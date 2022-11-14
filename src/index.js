@@ -28,7 +28,7 @@ mongoClient
 
 //schemas - joi
 const participantSchema = joi.object({
-  name: joi.string().alphanum().required(),
+  name: joi.string().max(20).min(2).regex(/[a-zA-Z0-9ã-ũÃ-Ũá-úÁ-Úâ-ûÂ-Ûà-ùÀ-Ù]/).required(),
   lastStatus: joi.number().required(),
 });
 
@@ -64,7 +64,6 @@ async function checkOnlineParticipants() {
         .collection("participants")
         .deleteOne({ _id: ObjectId(participantsToBeDeleted[i]._id) });
       await db.collection("messages").insertOne(exitMessage);
-      console.log(participantsToBeDeleted[i]._id);
     }
   } catch (error) {
     console.log(`CHECK ONLINE: ${error}`)
