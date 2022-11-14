@@ -41,8 +41,9 @@ const messageSchema = joi.object({
 });
 
 app.post("/participants", async (req, res) => {
+  console.log("entrou aqui");
+  const { name } = req.body;
   try {
-    const { name } = req.body;
     const alreadyRegistered = await db
       .collection("participants")
       .findOne({ name: name });
@@ -60,10 +61,11 @@ app.post("/participants", async (req, res) => {
     const participantValidation = participantSchema.validate(participant, {
       abortEarly: false,
     });
-    console.log(participantValidation);
 
     if (participantValidation.error) {
-      const erros = participantValidation.error;
+      const erros = participantValidation.error.details.map(
+        (details) => details.message
+      );
       res.status(422).send(erros);
       return;
     }
@@ -98,13 +100,13 @@ app.get("/participants", (req, res) => {
 });
 
 app.post("/messages", async (req, res) => {
+  const { to, text, type } = req.body;
   try {
-    const { to, text, type } = req.body;
     const foundUser = await db
       .collection("participants")
       .findOne({ name: req.headers.user });
     if (!foundUser) {
-      res.status(422).send({ message: "User not found" });
+      res.status(404).send({ message: "User not found" });
       return;
     }
     const message = {
@@ -135,15 +137,40 @@ app.post("/messages", async (req, res) => {
 });
 //front enviando limit por padrao
 app.get("/messages", async (req, res) => {
+  const limit = parseInt(req.query.limit);
   try {
-    const limit = parseInt(req.query.limit);
+    const foundUser = await db
+      .collection("participants")
+      .findOne({ name: req.headers.user });
+    if (!foundUser) {
+      res.status(404).send({ message: "User not found" });
+      return;
+    }
     let messages = await db.collection("messages").find({}).toArray();
-    console.log(limit)
     if (limit) {
-      messages = messages.filter((e, index) => index < limit);
+      //messages = messages.filter((msg, index) => index < limit);
+      const limitedMessages = [];
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (limitedMessages.length < limit) {
+          if (messages[i].to === "Todos" || messages[i].to === foundUser.name || messages[i].from === foundUser.name  ){
+            limitedMessages.unshift(messages[i]);
+          }
+        }
+      }
+      messages = limitedMessages;
+      console.log(messages.length);
+    } else {
+      messages = messages.filter((msg,i) => {
+        if (messages[i].to === "Todos" || messages[i].to === foundUser.name || messages[i].from === foundUser.name  ){
+          return true;
+        }
+        else{
+          return false;
+        }
+      });
       console.log(messages.length);
     }
-    
+
     res.send(messages);
   } catch (error) {
     console.log(error);
@@ -151,23 +178,26 @@ app.get("/messages", async (req, res) => {
   }
 });
 
-app.post("/status", (req, res) => {
-  const { user } = req.headers;
-  db.collection("participants")
-    .updateOne(
-      { user: user },
-      {
-        $set: {
-          lastStatus: Date.now(),
-        },
-      }
-    )
-    .then((response) => {
-      console.log(response);
-    })
-    .catch((err) => {
-      console.log(err);
-    });
+app.post("/status", async (req, res) => {
+  try {
+    const foundUser = await db
+      .collection("participants")
+      .findOne({ name: req.headers.user });
+    if (!foundUser) {
+      res.status(404).send({ message: "User not found" });
+      return;
+    }
+    await db
+      .collection("participants")
+      .updateOne(
+        { user: foundUser.name },
+        { $set: { lastStatus: Date.now() } }
+      );
+    res.status(200).send(req.headers.user);
+  } catch (error) {
+    console.log(err);
+    res.sendStatus(500);
+  }
 });
 
 app.listen(5000, () => {
